@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SECURITY ACCESS</title>
+    <style>
+        :root {
+            --primary: #0F0;
+            --bg: #000;
+            --glass: rgba(0, 20, 0, 0.8);
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg);
+            color: var(--primary);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* 禁止捲動 */
+            user-select: none; /* 禁止選取文字 */
+            -webkit-user-select: none;
+        }
+
+        /* 背景 Matrix 特效 */
+        canvas#matrix {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        /* 上半部：顯示區 */
+        .display-area {
+            flex: 1; /* 佔據剩餘空間 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            backdrop-filter: blur(2px);
+        }
+
+        h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            border-bottom: 1px solid var(--primary);
+            padding-bottom: 5px;
+        }
+
+        .status-msg {
+            font-size: 0.8rem;
+            margin-bottom: 30px;
+            opacity: 0.8;
+            height: 20px;
+        }
+
+        /* 密碼輸入框顯示 */
+        .code-display {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .digit-box {
+            width: 40px;
+            height: 50px;
+            border: 2px solid var(--primary);
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+            transition: all 0.2s;
+        }
+
+        /* 當前輸入的位置發光 */
+        .digit-box.active {
+            background: rgba(0, 255, 0, 0.2);
+            box-shadow: 0 0 15px var(--primary);
+            border-color: #fff;
+        }
+
+        .digit-box.error {
+            border-color: red;
+            color: red;
+            box-shadow: 0 0 10px red;
+            animation: shake 0.4s;
+        }
+
+        .digit-box.success {
+            border-color: #0ff;
+            color: #0ff;
+            box-shadow: 0 0 15px #0ff;
+        }
+
+        /* 下半部：鍵盤區 */
+        .keypad-area {
+            background: var(--glass);
+            padding: 20px;
+            border-top: 1px solid var(--primary);
+            box-shadow: 0 -5px 20px rgba(0, 255, 0, 0.1);
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .key {
+            padding: 15px 0;
+            font-size: 1.5rem;
+            text-align: center;
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            cursor: pointer;
+            background: rgba(0, 50, 0, 0.3);
+            transition: transform 0.1s, background 0.1s;
+        }
+
+        .key:active {
+            transform: scale(0.95);
+            background: var(--primary);
+            color: #000;
+        }
+
+        .key-del { border-color: #e74c3c; color: #e74c3c; }
+        .key-del:active { background: #e74c3c; color: #fff; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="matrix"></canvas>
+
+    <div class="display-area">
+        <h2>身份驗證系統</h2>
+        <div class="status-msg" id="msg">請輸入 6 位數安全碼</div>
+
+        <div class="code-display">
+            <div class="digit-box active"></div>
+            <div class="digit-box"></div>
+            <div class="digit-box"></div>
+            <div class="digit-box"></div>
+            <div class="digit-box"></div>
+            <div class="digit-box"></div>
+        </div>
+    </div>
+
+    <div class="keypad-area">
+        <div class="keypad">
+            <div class="key" onclick="input('1')">1</div>
+            <div class="key" onclick="input('2')">2</div>
+            <div class="key" onclick="input('3')">3</div>
+            <div class="key" onclick="input('4')">4</div>
+            <div class="key" onclick="input('5')">5</div>
+            <div class="key" onclick="input('6')">6</div>
+            <div class="key" onclick="input('7')">7</div>
+            <div class="key" onclick="input('8')">8</div>
+            <div class="key" onclick="input('9')">9</div>
+            <div class="key key-del" onclick="del()">DEL</div>
+            <div class="key" onclick="input('0')">0</div>
+            <div class="key" onclick="reset()">CLR</div>
+        </div>
+    </div>
+
+<script>
+    /* ================= 1. Matrix 背景特效 ================= */
+    const canvas = document.getElementById('matrix');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZアイウエオカキクケコサシスセソ';
+    const charArray = chars.split('');
+    const fontSize = 12; // 手機字體小一點
+    let columns = canvas.width / fontSize;
+    let drops = [];
+
+    function initDrops() {
+        columns = canvas.width / fontSize;
+        drops = [];
+        for(let i = 0; i < columns; i++) drops[i] = Math.random() * -50; // 隨機初始高度
+    }
+    initDrops();
+
+    function drawMatrix() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0F0';
+        ctx.font = fontSize + 'px monospace';
+
+        for(let i = 0; i < drops.length; i++) {
+            const text = charArray[Math.floor(Math.random() * charArray.length)];
+            ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+            if(drops[i] * fontSize > canvas.height && Math.random() > 0.98) drops[i] = 0;
+            drops[i]++;
+        }
+    }
+    setInterval(drawMatrix, 40);
+
+    /* ================= 2. 輸入邏輯 ================= */
+    const CORRECT_CODE = "176523"; // 設定你的密碼
+    const TARGET_URL = "\success.html"; // 跳轉網址
+    
+    let currentInput = "";
+    const boxes = document.querySelectorAll('.digit-box');
+    const msg = document.getElementById('msg');
+    let isLocked = false; // 防止驗證時重複輸入
+
+    function updateDisplay() {
+        // 更新每一個格子的數字
+        boxes.forEach((box, index) => {
+            box.innerText = currentInput[index] || "";
+            
+            // 處理光標 (Active) 樣式
+            box.classList.remove('active');
+            if (!isLocked) {
+                if (index === currentInput.length) {
+                    box.classList.add('active'); // 當前輸入位
+                }
+            }
+        });
+    }
+
+    function input(num) {
+        if (isLocked) return;
+        if (currentInput.length < 6) {
+            currentInput += num;
+            updateDisplay();
+            
+            // 震動回饋 (Android 支援)
+            if(navigator.vibrate) navigator.vibrate(30);
+
+            if (currentInput.length === 6) {
+                checkCode();
+            }
+        }
+    }
+
+    function del() {
+        if (isLocked) return;
+        if (currentInput.length > 0) {
+            currentInput = currentInput.slice(0, -1);
+            updateDisplay();
+            if(navigator.vibrate) navigator.vibrate(30);
+        }
+    }
+
+    function reset() {
+        if (isLocked) return;
+        currentInput = "";
+        updateDisplay();
+        boxes.forEach(box => {
+            box.classList.remove('error', 'success');
+        });
+    }
+
+    function checkCode() {
+        isLocked = true; // 鎖定輸入
+        
+        if (currentInput === CORRECT_CODE) {
+            msg.innerText = "ACCESS GRANTED... 正在載入";
+            msg.style.color = "#0ff";
+            boxes.forEach(box => box.classList.add('success'));
+            
+            if(navigator.vibrate) navigator.vibrate([100, 50, 100]); // 成功震動
+
+            setTimeout(() => {
+                window.location.href = TARGET_URL;
+            }, 800);
+        } else {
+            msg.innerText = "ACCESS DENIED - 密碼錯誤";
+            msg.style.color = "red";
+            boxes.forEach(box => box.classList.add('error'));
+            
+            if(navigator.vibrate) navigator.vibrate(300); // 錯誤長震
+
+            setTimeout(() => {
+                isLocked = false;
+                currentInput = "";
+                boxes.forEach(box => box.classList.remove('error'));
+                msg.innerText = "請輸入 6 位數安全碼";
+                msg.style.color = "var(--primary)";
+                updateDisplay();
+            }, 600);
+        }
+    }
+</script>
+</body>
+</html>
