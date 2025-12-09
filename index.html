@@ -221,7 +221,75 @@
     }
     setInterval(drawMatrix, 40);
 
-    /* ================= 2. 輸入邏輯 ================= */
+    /* ================= 2. 混合回饋系統 (聲音 + 震動) ================= */
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+
+    // 核心回饋函式：傳入類型，同時觸發震動與聲音
+    function triggerFeedback(type) {
+        // --- A. 處理聲音 ---
+        if (!audioCtx) audioCtx = new AudioContext();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        // --- B. 處理震動 ---
+        // 檢查瀏覽器是否支援 vibrate，不支援就略過，不會報錯
+        const canVibrate = ('vibrate' in navigator);
+
+        // 根據類型設定不同的聲音和震動模式
+        if (type === 'click') {
+            // 普通按鍵：高頻短音 + 短震動
+            oscillator.type = 'square';
+            oscillator.frequency.value = 1200;
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.05);
+            
+            if(canVibrate) navigator.vibrate(30);
+
+        } else if (type === 'delete') {
+            // 刪除：低頻音 + 短震動
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.value = 600;
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.08);
+
+            if(canVibrate) navigator.vibrate(30);
+
+        } else if (type === 'error') {
+            // 錯誤：低沉長音 + 長震動
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.value = 150;
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.3);
+
+            if(canVibrate) navigator.vibrate(400);
+
+        } else if (type === 'success') {
+            // 成功：雙響音 + 節奏震動
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(1500, audioCtx.currentTime);
+            oscillator.frequency.setValueAtTime(2000, audioCtx.currentTime + 0.1); // 變調
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.2);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.3);
+
+            if(canVibrate) navigator.vibrate([100, 50, 100]); // 噠-噠
+        }
+    }
+    
+    /* ================= 3. 輸入邏輯 ================= */
     const CORRECT_CODE = "176523"; // 設定你的密碼
     const TARGET_URL = "\success.html"; // 跳轉網址
     
@@ -250,9 +318,7 @@
         if (currentInput.length < 6) {
             currentInput += num;
             updateDisplay();
-            
-            // 震動回饋 (Android 支援)
-            if(navigator.vibrate) navigator.vibrate(30);
+            triggerFeedback('click');
 
             if (currentInput.length === 6) {
                 checkCode();
@@ -265,17 +331,18 @@
         if (currentInput.length > 0) {
             currentInput = currentInput.slice(0, -1);
             updateDisplay();
-            if(navigator.vibrate) navigator.vibrate(30);
+            triggerFeedback('delete');
         }
     }
 
     function reset() {
         if (isLocked) return;
         currentInput = "";
+        triggerFeedback('delete');
         updateDisplay();
-        boxes.forEach(box => {
-            box.classList.remove('error', 'success');
-        });
+        boxes.forEach(box => box.classList.remove('error', 'success'));
+        msg.innerText = "請輸入 6 位數安全碼";
+        msg.style.color = "var(--primary)";
     }
 
     function checkCode() {
@@ -286,7 +353,7 @@
             msg.style.color = "#0ff";
             boxes.forEach(box => box.classList.add('success'));
             
-            if(navigator.vibrate) navigator.vibrate([100, 50, 100]); // 成功震動
+            triggerFeedback('success');
 
             setTimeout(() => {
                 window.location.href = TARGET_URL;
@@ -296,7 +363,7 @@
             msg.style.color = "red";
             boxes.forEach(box => box.classList.add('error'));
             
-            if(navigator.vibrate) navigator.vibrate(300); // 錯誤長震
+            triggerFeedback('error'); // 錯誤長震
 
             setTimeout(() => {
                 isLocked = false;
